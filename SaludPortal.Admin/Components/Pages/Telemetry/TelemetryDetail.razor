@@ -1,0 +1,233 @@
+@page "/telemetry/{Id:long}"
+@attribute [Authorize]
+@using SaludPortal.Admin.Data
+@using SaludPortal.Admin.Services
+@inject TelemetryService TelemetryService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Detalle de telemetria - Admin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-4 mb-4">
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_event is null)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Evento no encontrado.</MudAlert>
+        <MudButton Class="mt-3" Variant="Variant.Text" Color="Color.Primary" OnClick='() => Nav.NavigateTo("/telemetry")'>
+            Volver
+        </MudButton>
+    }
+    else
+    {
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack"
+                           OnClick='() => Nav.NavigateTo("/telemetry")'>
+                    Volver a telemetria
+                </MudButton>
+                <MudText Typo="Typo.h5">Detalle del evento #@_event.Id</MudText>
+            </MudStack>
+
+                <MudPaper Class="pa-4" Elevation="1">
+                <MudStack Spacing="4">
+
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Primary" Class="section-header">Evento</MudText>
+                        <MudDivider Class="mb-3" />
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Timestamp</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudText Typo="Typo.body1">@_event.Timestamp.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss zzz")</MudText>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Tipo</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudChip T="string" Size="Size.Small" Color="@GetEventColor(_event.EventType)">@_event.EventType</MudChip>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Source</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudText Typo="Typo.body2">@(_event.Source ?? "-")</MudText>
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Primary" Class="section-header">Navegacion</MudText>
+                        <MudDivider Class="mb-3" />
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Ruta</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudText Typo="Typo.body2" Class="mono-inline">@_event.Route</MudText>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Target</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudText Typo="Typo.body2" Class="mono-inline">@(_event.Target ?? "-")</MudText>
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Primary" Class="section-header">Paciente &amp; Sesion</MudText>
+                        <MudDivider Class="mb-3" />
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">PacienteId</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2">@(_event.PatientId ?? "-")</MudText>
+                                    @if (_event.PatientId is not null)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                                       title="Copiar" OnClick='() => CopyAsync(_event.PatientId)' />
+                                    }
+                                </MudStack>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">SessionId</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2" Class="mono-inline">@(_event.SessionId ?? "-")</MudText>
+                                    @if (_event.SessionId is not null)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                                       title="Copiar" OnClick='() => CopyAsync(_event.SessionId)' />
+                                    }
+                                </MudStack>
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Primary" Class="section-header">Dispositivo &amp; Red</MudText>
+                        <MudDivider Class="mb-3" />
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">IP</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2" Class="mono-inline">@(_event.ClientIp ?? "-")</MudText>
+                                    @if (_event.ClientIp is not null)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                                       title="Copiar" OnClick='() => CopyAsync(_event.ClientIp)' />
+                                    }
+                                </MudStack>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Dispositivo</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudText Typo="Typo.body2">@FormatDevice(_event.Browser, _event.OsName, _event.OsVersion, _event.DeviceType)</MudText>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Geolocalizacion</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                @if (_event.Latitude.HasValue && _event.Longitude.HasValue)
+                                {
+                                    <MudLink Href="@($"https://maps.google.com/?q={_event.Latitude.Value:F6},{_event.Longitude.Value:F6}")" Target="_blank" Typo="Typo.body2" Class="mono-inline">
+                                        @($"{_event.Latitude.Value:F6}, {_event.Longitude.Value:F6}")
+                                    </MudLink>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Class="mono-inline">-</MudText>
+                                }
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">User-Agent</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudPaper Outlined="true" Class="pa-3 detail-pre">@(_event.UserAgent ?? "-")</MudPaper>
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Primary" Class="section-header">Metadata</MudText>
+                        <MudDivider Class="mb-3" />
+                        <MudPaper Outlined="true" Class="pa-3 detail-pre">@FormatJson(_event.MetadataJson)</MudPaper>
+                    </div>
+
+                </MudStack>
+            </MudPaper>
+        </MudStack>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public long Id { get; set; }
+
+    private TelemetryEvent? _event;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _event = await TelemetryService.GetEventByIdAsync(Id);
+        _loading = false;
+    }
+
+    private async Task CopyAsync(string? value)
+    {
+        if (!string.IsNullOrEmpty(value))
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value);
+    }
+
+    private static string FormatJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return "-";
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return System.Text.Json.JsonSerializer.Serialize(doc, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return json;
+        }
+    }
+
+    private static Color GetEventColor(string? eventType) => eventType?.ToLowerInvariant() switch
+    {
+        "view_page" => Color.Info,
+        "click" => Color.Primary,
+        _ => Color.Default
+    };
+
+    private static string FormatDevice(string? browser, string? osName, string? osVersion, string? deviceType)
+    {
+        var parts = new[]
+        {
+            browser,
+            string.IsNullOrWhiteSpace(osName) ? null : $"{osName} {osVersion}".Trim(),
+            deviceType
+        }
+        .Where(static value => !string.IsNullOrWhiteSpace(value));
+
+        var joined = string.Join(" / ", parts);
+        return string.IsNullOrWhiteSpace(joined) ? "-" : joined;
+    }
+}

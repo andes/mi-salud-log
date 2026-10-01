@@ -1,0 +1,218 @@
+@page "/mantenimiento"
+@attribute [Authorize]
+@using SaludPortal.Admin.Entities
+@using SaludPortal.Admin.Services
+@inject DataRetentionService RetentionService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Mantenimiento - Admin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-4 mb-4">
+    <MudStack Spacing="4">
+        <MudText Typo="Typo.h4">Mantenimiento</MudText>
+
+        <MudAlert Severity="Severity.Info">
+            Esta acción aplica eliminación lógica a logs y/o eventos de telemetría anteriores a la fecha indicada.
+            Los registros dejan de mostrarse en el panel y se conservan en la base de datos.
+        </MudAlert>
+
+        <MudPaper Outlined="true" Class="pa-4">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6">Eliminar datos antiguos</MudText>
+
+                <MudDatePicker @bind-Date="_cutoffDate" Label="Eliminar anteriores a"
+                               Variant="Variant.Outlined" Margin="Margin.Dense"
+                               DateFormat="dd/MM/yyyy" MaxDate="@DateTime.Today" />
+
+                <MudStack Row="true" Spacing="4">
+                    <MudCheckBox T="bool" @bind-Value="_purgeLogs" Label="Logs" Color="Color.Primary" />
+                    <MudCheckBox T="bool" @bind-Value="_purgeTelemetry" Label="Telemetría" Color="Color.Primary" />
+                </MudStack>
+
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Calculate"
+                               Disabled="@(!_cutoffDate.HasValue || _previewLoading)"
+                               OnClick="RefreshPreviewAsync">
+                        Calcular
+                    </MudButton>
+                    @if (_previewLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    }
+                    else if (_preview is not null)
+                    {
+                        <MudText Typo="Typo.body2">
+                            Se marcarían como eliminados
+                            @(_purgeLogs ? $"{_preview.LogCount:N0} logs" : "0 logs")
+                            y
+                            @(_purgeTelemetry ? $"{_preview.TelemetryCount:N0} eventos de telemetría" : "0 eventos de telemetría").
+                        </MudText>
+                    }
+                </MudStack>
+
+                <MudTextField @bind-Value="_password" Label="Tu contraseña" InputType="InputType.Password"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              HelperText="Se requiere tu contraseña para confirmar la eliminación lógica." />
+
+                <MudButton Variant="Variant.Filled" Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Delete"
+                           Disabled="@(!CanPurge || _purging)"
+                           OnClick="ConfirmPurgeAsync">
+                    @if (_purging)
+                    {
+                        <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                    }
+                    Eliminar
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.h6">Historial de purgas</MudText>
+            @if (_auditLoading)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            else if (_auditEvents.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info">Aún no hay purgas registradas.</MudAlert>
+            }
+            else
+            {
+                <MudTable Items="_auditEvents" Hover="true" Dense="true" Bordered="true" Striped="true"
+                          Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Fecha</MudTh>
+                        <MudTh>Usuario</MudTh>
+                        <MudTh>Anteriores a</MudTh>
+                        <MudTh>Logs eliminados</MudTh>
+                        <MudTh>Telemetría eliminada</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Fecha">@context.Timestamp.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+                        <MudTd DataLabel="Usuario">@context.UserEmail</MudTd>
+                        <MudTd DataLabel="Anteriores a">
+                            @(context.CutoffUtc?.ToLocalTime().ToString("dd/MM/yyyy HH:mm") ?? "—")
+                        </MudTd>
+                        <MudTd DataLabel="Logs eliminados">@context.DeletedLogs.ToString("N0")</MudTd>
+                        <MudTd DataLabel="Telemetría eliminada">@context.DeletedTelemetry.ToString("N0")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudStack>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private DateTime? _cutoffDate;
+    private bool _purgeLogs = true;
+    private bool _purgeTelemetry = true;
+    private string _password = "";
+    private PurgePreview? _preview;
+    private bool _previewLoading;
+    private bool _purging;
+    private bool _auditLoading = true;
+    private List<AdminAuditEvent> _auditEvents = [];
+
+    private bool CanPurge =>
+        _cutoffDate.HasValue
+        && (_purgeLogs || _purgeTelemetry)
+        && !string.IsNullOrWhiteSpace(_password)
+        && _preview is not null
+        && ((_purgeLogs && _preview.LogCount > 0) || (_purgeTelemetry && _preview.TelemetryCount > 0));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAuditAsync();
+    }
+
+    private DateTimeOffset? GetCutoffUtc()
+    {
+        if (!_cutoffDate.HasValue) return null;
+        var localStart = _cutoffDate.Value.Date;
+        return new DateTimeOffset(localStart, TimeZoneInfo.Local.GetUtcOffset(localStart)).ToUniversalTime();
+    }
+
+    private async Task RefreshPreviewAsync()
+    {
+        var cutoff = GetCutoffUtc();
+        if (!cutoff.HasValue) return;
+
+        _previewLoading = true;
+        try
+        {
+            _preview = await RetentionService.GetPurgePreviewAsync(cutoff.Value);
+        }
+        finally
+        {
+            _previewLoading = false;
+        }
+    }
+
+    private async Task ConfirmPurgeAsync()
+    {
+        var cutoff = GetCutoffUtc();
+        if (!cutoff.HasValue || _preview is null) return;
+
+        var logsPart = _purgeLogs ? $"{_preview.LogCount:N0} logs" : null;
+        var telPart = _purgeTelemetry ? $"{_preview.TelemetryCount:N0} eventos de telemetría" : null;
+        var parts = string.Join(" y ", new[] { logsPart, telPart }.Where(p => p is not null));
+
+        var parameters = new DialogParameters<MudMessageBox>
+        {
+            { x => x.Message, $"¿Marcar como eliminados {parts} anteriores al {_cutoffDate:dd/MM/yyyy}? Dejarán de mostrarse en el panel." },
+            { x => x.YesText, "Eliminar" },
+            { x => x.CancelText, "Cancelar" }
+        };
+        var dialog = await DialogService.ShowAsync<MudMessageBox>("Confirmar eliminación lógica", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small });
+        var dialogResult = await dialog.Result;
+        if (dialogResult is null || dialogResult.Canceled) return;
+
+        _purging = true;
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var result = await RetentionService.PurgeAsync(
+                cutoff.Value,
+                _purgeLogs,
+                _purgeTelemetry,
+                _password,
+                authState.User);
+
+            if (result.Succeeded)
+            {
+                Snackbar.Add(
+                    $"Marcados como eliminados {result.DeletedLogs:N0} logs y {result.DeletedTelemetry:N0} eventos de telemetría.",
+                    Severity.Success);
+                _password = "";
+                _preview = null;
+                await LoadAuditAsync();
+            }
+            else
+            {
+                Snackbar.Add(result.Error ?? "No se pudo completar la eliminación.", Severity.Error);
+            }
+        }
+        finally
+        {
+            _purging = false;
+        }
+    }
+
+    private async Task LoadAuditAsync()
+    {
+        _auditLoading = true;
+        try
+        {
+            _auditEvents = await RetentionService.GetRecentAuditEventsAsync();
+        }
+        finally
+        {
+            _auditLoading = false;
+        }
+    }
+}

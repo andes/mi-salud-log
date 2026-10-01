@@ -1,0 +1,144 @@
+@page "/logs/mapa"
+@attribute [Authorize]
+@using SaludPortal.Admin.Services
+@inject LogsService LogService
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Mapa de calor — Logs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-4 mb-4">
+    <MudStack Spacing="3">
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h4">Mapa de calor — Logs</MudText>
+            @if (!_loading && _pointCount >= 0)
+            {
+                <MudChip T="string" Color="Color.Primary" Size="Size.Small">
+                    @_pointCount @(_pointCount == 1 ? "punto" : "puntos") cargados
+                </MudChip>
+            }
+        </MudStack>
+
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudGrid Spacing="2">
+
+                <MudItem xs="12" sm="6" md="3">
+                    <MudDatePicker @bind-Date="_dateFrom" Label="Desde" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3">
+                    <MudDatePicker @bind-Date="_dateTo" Label="Hasta" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string" @bind-Value="_filterLevel" Label="Nivel" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" Clearable="true">
+                        <MudSelectItem T="string" Value='@("Debug")'>Debug</MudSelectItem>
+                        <MudSelectItem T="string" Value='@("Information")'>Information</MudSelectItem>
+                        <MudSelectItem T="string" Value='@("Warning")'>Warning</MudSelectItem>
+                        <MudSelectItem T="string" Value='@("Error")'>Error</MudSelectItem>
+                        <MudSelectItem T="string" Value='@("Critical")'>Critical</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3" Class="d-flex align-end">
+                    <MudStack Row="true" Spacing="1" Class="w-100">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFiltersAsync"
+                                   Disabled="_loading" FullWidth="true">
+                            Aplicar
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="ClearFiltersAsync"
+                                   Disabled="_loading" FullWidth="true">
+                            Limpiar
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+
+            </MudGrid>
+        </MudPaper>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+
+        <MudPaper Elevation="2" Class="overflow-hidden" Style="border-radius:8px;">
+            <div id="logs-heatmap" class="heatmap-container"></div>
+        </MudPaper>
+
+    </MudStack>
+</MudContainer>
+
+@code {
+    private const string MapId = "logs-heatmap";
+
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+    private string _filterLevel = string.Empty;
+    private bool _loading = true;
+    private int _pointCount = -1;
+    private bool _mapInitialized = false;
+
+    // Points serialized as [[lat, lon, intensity], ...]
+    private double[][] _points = [];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await LoadDataAsync();
+        await JS.InvokeVoidAsync("adminHeatmap.init", MapId, _points);
+        _mapInitialized = true;
+        StateHasChanged();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        DateTimeOffset? from = _dateFrom.HasValue
+            ? new DateTimeOffset(_dateFrom.Value.Date, TimeZoneInfo.Local.GetUtcOffset(_dateFrom.Value.Date)).ToUniversalTime()
+            : null;
+
+        DateTimeOffset? to = _dateTo.HasValue
+            ? new DateTimeOffset(_dateTo.Value.Date.AddDays(1).AddTicks(-1), TimeZoneInfo.Local.GetUtcOffset(_dateTo.Value.Date)).ToUniversalTime()
+            : null;
+
+        var levelFilter = string.IsNullOrWhiteSpace(_filterLevel) ? null : _filterLevel;
+
+        var rawPoints = await LogService.GetHeatmapPointsAsync(from, to, levelFilter);
+        _points = rawPoints.Select(p => new double[] { p.Lat, p.Lon, p.Intensity }).ToArray();
+        _pointCount = rawPoints.Count;
+        _loading = false;
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        await LoadDataAsync();
+        if (_mapInitialized)
+            await JS.InvokeVoidAsync("adminHeatmap.update", MapId, _points);
+        StateHasChanged();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _dateFrom = null;
+        _dateTo = null;
+        _filterLevel = string.Empty;
+        await ApplyFiltersAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_mapInitialized) return;
+        try
+        {
+            await JS.InvokeVoidAsync("adminHeatmap.destroy", MapId);
+        }
+        catch (JSDisconnectedException) { }
+    }
+}

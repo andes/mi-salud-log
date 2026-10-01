@@ -1,0 +1,35 @@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body1">
+                Seleccione el formato y la cantidad máxima de registros a exportar.
+            </MudText>
+            <MudRadioGroup T="string" @bind-Value="_format">
+                <MudStack Spacing="0">
+                    <MudRadio T="string" Value="@("csv")">CSV — planilla de cálculo (.csv)</MudRadio>
+                    <MudRadio T="string" Value="@("json")">JSON — datos estructurados (.json)</MudRadio>
+                    <MudRadio T="string" Value="@("pdf")">PDF — informe imprimible (.pdf)</MudRadio>
+                </MudStack>
+            </MudRadioGroup>
+            <MudNumericField T="int" @bind-Value="_maxRows" Label="Máx. registros"
+                             Min="1" Max="50000" Variant="Variant.Outlined" Margin="Margin.Dense"
+                             HelperText="Máximo 50.000 registros por exportación" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">
+            Exportar
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _format = "csv";
+    private int _maxRows = 1000;
+
+    private void Submit() => MudDialog.Close(DialogResult.Ok((_format, _maxRows)));
+}

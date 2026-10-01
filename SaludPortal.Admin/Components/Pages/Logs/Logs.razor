@@ -1,0 +1,291 @@
+@page "/logs"
+@attribute [Authorize]
+@using SaludPortal.Admin.Data
+@using SaludPortal.Admin.Models
+@using SaludPortal.Admin.Services
+@inject LogsService LogService
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+
+<PageTitle>Logs del sitio - Admin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" class="mt-4 mb-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h4">Logs del sitio</MudText>
+            <MudButton StartIcon="@Icons.Material.Filled.FileDownload" Variant="Variant.Outlined"
+                       Color="Color.Secondary" OnClick="OpenExportDialogAsync">
+                Exportar
+            </MudButton>
+        </MudStack>
+
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="12" md="6">
+                    <MudStack Spacing="1">
+                        <MudTextField T="string" @bind-Value="_search" Label="Buscar" Placeholder="Mensaje o categoria"
+                                      Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" OnKeyUp="OnSearchKeyUp" />
+                        <MudSelect T="string" @bind-Value="_filterLevel" Label="Nivel" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" Clearable="true">
+                            <MudSelectItem T="string" Value='@("Debug")'>Debug</MudSelectItem>
+                            <MudSelectItem T="string" Value='@("Information")'>Information</MudSelectItem>
+                            <MudSelectItem T="string" Value='@("Warning")'>Warning</MudSelectItem>
+                            <MudSelectItem T="string" Value='@("Error")'>Error</MudSelectItem>
+                            <MudSelectItem T="string" Value='@("Critical")'>Critical</MudSelectItem>
+                        </MudSelect>
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack Spacing="1">
+                        <MudDatePicker @bind-Date="_dateFrom" Label="Desde" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+                        <MudTimePicker @bind-Time="_timeFrom" Label="Hora desde" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense" AmPm="false" />
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack Spacing="1">
+                        <MudDatePicker @bind-Date="_dateTo" Label="Hasta" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+                        <MudTimePicker @bind-Time="_timeTo" Label="Hora hasta" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense" AmPm="false" />
+                    </MudStack>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFiltersAsync">Filtrar
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="ClearFiltersAsync">Limpiar
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (_result is null || _result.TotalCount == 0)
+        {
+            <MudAlert Severity="Severity.Info">No se encontraron registros.</MudAlert>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2">
+                Mostrando @((_currentPage - 1) * PageSize + 1)-@(Math.Min(_currentPage * PageSize, _result.TotalCount)) de
+                @_result.TotalCount registros
+            </MudText>
+
+            <MudTable Items="_result.Items" Hover="true" Dense="true" Bordered="true" Striped="true"
+                      Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Timestamp</MudTh>
+                    <MudTh>Nivel</MudTh>
+                    <MudTh>IP</MudTh>
+                    <MudTh>Dispositivo</MudTh>
+                    <MudTh>Geo</MudTh>
+                    <MudTh>PacienteId</MudTh>
+                    <MudTh>Categoria</MudTh>
+                    <MudTh>Mensaje</MudTh>
+                    <MudTh class="text-right">Accion</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Timestamp">@context.Timestamp.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</MudTd>
+                    <MudTd DataLabel="Nivel">
+                        <MudChip T="string" Size="Size.Small" Color="@GetLevelColor(context.Level)">@context.Level</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="IP">@(context.ClientIp ?? "-")</MudTd>
+                    <MudTd DataLabel="Dispositivo">@FormatDevice(context.Browser, context.OsName, context.DeviceType)</MudTd>
+                    <MudTd DataLabel="Geo">@FormatGeo(context.Latitude, context.Longitude)</MudTd>
+                    <MudTd DataLabel="PacienteId">@(context.PatientId ?? "-")</MudTd>
+                    <MudTd DataLabel="Categoria">@TruncateCategory(context.Category)</MudTd>
+                    <MudTd DataLabel="Mensaje">@Truncate(context.Message, 120)</MudTd>
+                    <MudTd DataLabel="Accion" Class="text-right">
+                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => GoToDetail(context.Id)">Ver
+                        </MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <MudStack Class="mt-2" Spacing="1" AlignItems="AlignItems.Center">
+                <MudPagination Count="@TotalPages" Selected="@_currentPage" SelectedChanged="OnPageChangedAsync"
+                               Color="Color.Primary" />
+            </MudStack>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private const int PageSize = 30;
+
+    private string _filterLevel = string.Empty;
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+    private TimeSpan? _timeFrom;
+    private TimeSpan? _timeTo;
+    private string? _search;
+    private int _currentPage = 1;
+    private bool _loading = true;
+    private PageResult<LogEntry>? _result;
+
+    private int TotalPages => _result is null ? 1 : (int)Math.Ceiling(_result.TotalCount / (double)PageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var fromDateTime = _dateFrom.HasValue
+            ? _dateFrom.Value.Date + (_timeFrom ?? TimeSpan.Zero)
+            : (DateTime?)null;
+        var toDateTime = _dateTo.HasValue
+            ? _timeTo.HasValue
+                ? _dateTo.Value.Date + _timeTo.Value
+                : _dateTo.Value.Date.AddDays(1).AddTicks(-1)
+            : (DateTime?)null;
+
+        DateTimeOffset? from = fromDateTime.HasValue
+            ? new DateTimeOffset(fromDateTime.Value, TimeZoneInfo.Local.GetUtcOffset(fromDateTime.Value)).ToUniversalTime()
+            : null;
+        DateTimeOffset? to = toDateTime.HasValue
+            ? new DateTimeOffset(toDateTime.Value, TimeZoneInfo.Local.GetUtcOffset(toDateTime.Value)).ToUniversalTime()
+            : null;
+
+        var levelFilter = string.IsNullOrWhiteSpace(_filterLevel) ? null : _filterLevel;
+        _result = await LogService.GetLogsAsync(_currentPage, PageSize, levelFilter, from, to, _search);
+        _loading = false;
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        _currentPage = 1;
+        await LoadAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _filterLevel = string.Empty;
+        _dateFrom = null;
+        _dateTo = null;
+        _timeFrom = null;
+        _timeTo = null;
+        _search = null;
+        _currentPage = 1;
+        await LoadAsync();
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ApplyFiltersAsync();
+        }
+    }
+
+    private async Task OnPageChangedAsync(int page)
+    {
+        if (page < 1 || page > TotalPages || page == _currentPage)
+        {
+            return;
+        }
+
+        _currentPage = page;
+        await LoadAsync();
+    }
+
+    private void GoToDetail(long id) => Nav.NavigateTo($"/logs/{id}");
+
+    private async Task OpenExportDialogAsync()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+        var dialog  = await DialogService.ShowAsync<ExportDialog>("Exportar registros", options);
+        var result  = await dialog.Result;
+        if (result is not null && !result.Canceled && result.Data is ValueTuple<string, int> t)
+            Nav.NavigateTo(BuildExportUrl(t.Item1, t.Item2), forceLoad: true);
+    }
+
+    private string BuildExportUrl(string format, int maxRows)
+    {
+        var fromDateTime = _dateFrom.HasValue
+            ? _dateFrom.Value.Date + (_timeFrom ?? TimeSpan.Zero)
+            : (DateTime?)null;
+        var toDateTime = _dateTo.HasValue
+            ? _timeTo.HasValue
+                ? _dateTo.Value.Date + _timeTo.Value
+                : _dateTo.Value.Date.AddDays(1).AddTicks(-1)
+            : (DateTime?)null;
+        DateTimeOffset? from = fromDateTime.HasValue
+            ? new DateTimeOffset(fromDateTime.Value, TimeZoneInfo.Local.GetUtcOffset(fromDateTime.Value)).ToUniversalTime()
+            : null;
+        DateTimeOffset? to = toDateTime.HasValue
+            ? new DateTimeOffset(toDateTime.Value, TimeZoneInfo.Local.GetUtcOffset(toDateTime.Value)).ToUniversalTime()
+            : null;
+        var sb = new System.Text.StringBuilder(
+            $"/api/export/logs?format={Uri.EscapeDataString(format)}&maxRows={maxRows}");
+        if (!string.IsNullOrWhiteSpace(_filterLevel))
+            sb.Append($"&level={Uri.EscapeDataString(_filterLevel)}");
+        if (from.HasValue) sb.Append($"&dateFrom={Uri.EscapeDataString(from.Value.ToString("O"))}");
+        if (to.HasValue)   sb.Append($"&dateTo={Uri.EscapeDataString(to.Value.ToString("O"))}");
+        if (!string.IsNullOrWhiteSpace(_search))
+            sb.Append($"&search={Uri.EscapeDataString(_search)}");
+        return sb.ToString();
+    }
+
+    private static Color GetLevelColor(string? level) => level?.ToLowerInvariant() switch
+    {
+        "error" => Color.Error,
+        "critical" => Color.Error,
+        "warning" => Color.Warning,
+        "information" => Color.Info,
+        "debug" => Color.Secondary,
+        _ => Color.Default
+    };
+
+    private static string? Truncate(string? s, int max)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        return s.Length <= max ? s : s[..max] + "...";
+    }
+
+    private static string? TruncateCategory(string? s)
+    {
+        if (s is null)
+        {
+            return null;
+        }
+
+        return s.Length <= 45 ? s : "..." + s[^42..];
+    }
+
+    private static string FormatGeo(double? lat, double? lon)
+    {
+        if (!lat.HasValue || !lon.HasValue)
+        {
+            return "-";
+        }
+
+        return $"{lat.Value:F5}, {lon.Value:F5}";
+    }
+
+    private static string FormatDevice(string? browser, string? osName, string? deviceType)
+    {
+        var parts = new[] { browser, osName, deviceType }
+            .Where(static value => !string.IsNullOrWhiteSpace(value));
+
+        var joined = string.Join(" / ", parts);
+        return string.IsNullOrWhiteSpace(joined) ? "-" : joined;
+    }
+}

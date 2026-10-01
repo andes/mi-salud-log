@@ -1,0 +1,24 @@
+/* Scoped styles for LogDetail.razor */
+.detail-pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: "Roboto Mono", "Consolas", monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.detail-pre-ex {
+    border-left: 4px solid var(--mud-palette-error);
+}
+
+.mono-inline {
+    font-family: "Roboto Mono", "Consolas", monospace;
+    font-size: 0.875rem;
+    word-break: break-all;
+}
+
+.section-header {
+    display: block;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.25rem;
+}

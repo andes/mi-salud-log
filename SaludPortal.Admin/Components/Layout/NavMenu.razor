@@ -1,0 +1,31 @@
+<div class="d-flex flex-column mud-height-full">
+    <MudNavMenu Class="flex-grow-1">
+        @* <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Inicio</MudNavLink> *@
+        <MudNavLink Href="/dashboard" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+        <MudNavGroup Title="Logs" Icon="@Icons.Material.Filled.List" Expanded="false">
+            <MudNavLink Href="/logs" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.TableRows">Lista</MudNavLink>
+            <MudNavLink Href="/logs/mapa" Icon="@Icons.Material.Filled.Map">Mapa de calor</MudNavLink>
+        </MudNavGroup>
+        <MudNavGroup Title="Telemetria" Icon="@Icons.Material.Filled.Insights" Expanded="false">
+            <MudNavLink Href="/telemetry" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.TableRows">Lista</MudNavLink>
+            <MudNavLink Href="/telemetry/mapa" Icon="@Icons.Material.Filled.Map">Mapa de calor</MudNavLink>
+        </MudNavGroup>
+        <MudNavGroup Title="Exportaciones" Icon="@Icons.Material.Filled.FileDownload" Expanded="false">
+            <MudNavLink Href="/export/logs" Icon="@Icons.Material.Filled.Article">Logs</MudNavLink>
+            <MudNavLink Href="/export/telemetry" Icon="@Icons.Material.Filled.Insights">Telemetría</MudNavLink>
+        </MudNavGroup>
+        <MudNavLink Href="/usuarios" Icon="@Icons.Material.Filled.People">Usuarios</MudNavLink>
+        <MudNavLink Href="/mantenimiento" Icon="@Icons.Material.Filled.DeleteSweep">Mantenimiento</MudNavLink>
+    </MudNavMenu>
+
+    <form method="post" action="/logout" class="pa-3 mt-auto">
+        <AntiforgeryToken />
+        <MudButton ButtonType="ButtonType.Submit"
+                   Variant="Variant.Outlined"
+                   Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.Logout"
+                   FullWidth="true">
+            Cerrar sesión
+        </MudButton>
+    </form>
+</div>

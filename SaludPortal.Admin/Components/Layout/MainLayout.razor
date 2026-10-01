@@ -1,0 +1,99 @@
+@inherits LayoutComponentBase
+@inject IJSRuntime JS
+
+<MudThemeProvider Theme="@SaludTheme.Current(_isDarkMode)" IsDarkMode="@_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Dense="true" Elevation="1">
+        <AuthorizeView>
+            <Authorized>
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                               OnClick="ToggleDrawer" />
+            </Authorized>
+        </AuthorizeView>
+        <MudText Typo="Typo.h6">Salud Portal - Admin</MudText>
+        <MudSpacer />
+
+        <MudImage Src="images/neuquen-logo.svg" Alt="Neuquén" Height="32"
+                  ObjectFit="ObjectFit.Contain" Class="mr-4" />
+        <MudImage Src="images/gobierno-neuquen.svg" Alt="Gobierno de Neuquén" Height="32"
+                  ObjectFit="ObjectFit.Contain" Class="mr-3" />
+
+        <MudTooltip Text="@(_isDarkMode ? "Modo claro" : "Modo oscuro")">
+            <MudIconButton Icon="@(_isDarkMode? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                           Color="Color.Inherit" OnClick="ToggleThemeAsync" />
+        </MudTooltip>
+
+        <AuthorizeView Context="authState">
+            <Authorized>
+                <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    <ActivatorContent Context="menu">
+                        <MudButton Variant="Variant.Text" OnClick="menu.ToggleAsync"
+                                   Class="pa-0" Style="min-width: auto;">
+                            <MudAvatar Color="Color.Secondary" Size="Size.Small" Variant="Variant.Outlined">
+                                @GetInitial(authState.User.Identity?.Name)
+                            </MudAvatar>
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <form method="post" action="/logout">
+                            <AntiforgeryToken />
+                            <MudButton ButtonType="ButtonType.Submit"
+                                       Variant="Variant.Text"
+                                       StartIcon="@Icons.Material.Filled.Logout"
+                                       FullWidth="true"
+                                       Class="mud-menu-item"
+                                       Style="justify-content: flex-start; text-transform: none;">
+                                Cerrar sesión
+                            </MudButton>
+                        </form>
+                    </ChildContent>
+                </MudMenu>
+            </Authorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <AuthorizeView>
+        <Authorized>
+            <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2"
+                       Variant="DrawerVariant.Persistent" Class="mud-height-full">
+                <NavMenu />
+            </MudDrawer>
+        </Authorized>
+    </AuthorizeView>
+
+    <MudMainContent>
+        @Body
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _isDarkMode;
+    private bool _drawerOpen = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _isDarkMode = await JS.InvokeAsync<bool>("adminTheme.get");
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleThemeAsync()
+    {
+        _isDarkMode = !_isDarkMode;
+        await JS.InvokeVoidAsync("adminTheme.set", _isDarkMode);
+    }
+
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+
+    private static string GetInitial(string? email)
+        => string.IsNullOrWhiteSpace(email) ? "?" : char.ToUpperInvariant(email.Trim()[0]).ToString();
+}

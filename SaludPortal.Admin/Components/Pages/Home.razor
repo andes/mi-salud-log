@@ -1,0 +1,86 @@
+@page "/"
+@inject NavigationManager Nav
+
+<PageTitle>Inicio</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        @{ Nav.NavigateTo("/dashboard", replace: true); }
+    </Authorized>
+
+    <NotAuthorized>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8 mb-8">
+            <MudGrid Spacing="6" Justify="Justify.Center" Class="align-center">
+                <MudItem xs="12" md="6" Class="d-flex justify-center">
+                    <MudImage Src="images/bannermisalud.png"
+                              Alt="Banner Mi Salud"
+                              Class="home-login-banner"
+                              ObjectFit="ObjectFit.Contain" />
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="home-login-card pa-6" Elevation="4">
+                        <MudStack Spacing="4">
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.h4">Acceso Admin</MudText>
+                                <MudText Typo="Typo.body2">Panel de gestion de eventos y logs.</MudText>
+                            </MudStack>
+
+                            @if (_error is not null)
+                            {
+                                <MudAlert Severity="Severity.Error" Dense="true">@_error</MudAlert>
+                            }
+
+                            @* Standard POST form — Identity writes auth cookie to HTTP headers outside Blazor circuit. *@
+                            <form method="post" action="/account/login">
+                                <MudStack Spacing="3">
+                                    <MudTextField T="string"
+                                                  Label="Email"
+                                                  Variant="Variant.Outlined"
+                                                  InputType="InputType.Email"
+                                                  name="email"
+                                                  autocomplete="username"
+                                                  Required="true" />
+
+                                    <MudTextField T="string"
+                                                  Label="Contraseña"
+                                                  Variant="Variant.Outlined"
+                                                  InputType="InputType.Password"
+                                                  name="password"
+                                                  autocomplete="current-password"
+                                                  Required="true" />
+
+                                    <MudButton ButtonType="ButtonType.Submit"
+                                               Variant="Variant.Filled"
+                                               Color="Color.Primary"
+                                               FullWidth="true"
+                                               Size="Size.Large"
+                                               Class="mt-1">
+                                        Ingresar
+                                    </MudButton>
+                                </MudStack>
+                            </form>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        </MudContainer>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? Error { get; set; }
+
+    private string? _error;
+
+    protected override void OnParametersSet()
+    {
+        _error = Error switch
+        {
+            "credentials" => "Email o contrasena incorrectos.",
+            "locked" => "Cuenta bloqueada. Intenta de nuevo mas tarde.",
+            _ => null
+        };
+    }
+}

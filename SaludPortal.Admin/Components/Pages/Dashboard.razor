@@ -1,0 +1,227 @@
+@page "/dashboard"
+@attribute [Authorize]
+@using SaludPortal.Admin.Models
+@using SaludPortal.Admin.Services
+@inject DashboardService DashboardService
+@inject NavigationManager Nav
+
+<PageTitle>Dashboard - Admin</PageTitle>
+
+<MudContainer Class="mt-6 mb-8" MaxWidth="MaxWidth.False">
+    <MudStack Spacing="4">
+        <AuthorizeView>
+            <Authorized>
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h4">Bienvenido, @context.User.Identity?.Name</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Primary">Dashboard del sitio</MudText>
+                </MudStack>
+            </Authorized>
+        </AuthorizeView>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudGrid>
+
+                @* Slot 1: Eventos hoy *@
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Elevation="2" Class="pa-4" Style="height: 200px;">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Eventos hoy</MudText>
+                            <MudText Typo="Typo.h3">@(_stats?.EventosHoy ?? 0)</MudText>
+                            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                                @foreach (var kv in _stats?.EventosPorTipo ?? [])
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="@GetEventColor(kv.Key)">
+                                        @kv.Key: @kv.Value
+                                    </MudChip>
+                                }
+                            </MudStack>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                @* Slot 2: Pacientes activos hoy *@
+                <MudItem xs="12" sm="6" md="4">
+                    <MudPaper Elevation="2" Class="pa-4" Style="height: 200px;">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Pacientes activos hoy</MudText>
+                            <MudText Typo="Typo.h3">@(_stats?.PacientesActivasHoy ?? 0)</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Primary">sesiones únicas con actividad registrada</MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                @* Slot 3: Errores hoy *@
+                <MudItem xs="12" sm="12" md="4">
+                    <MudPaper Elevation="2" Class="pa-4" Style="height: 200px;">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Errores hoy</MudText>
+                            <MudText Typo="Typo.h3" Color="@(_stats?.ErroresHoy > 0 ? Color.Error : Color.Success)">
+                                @(_stats?.ErroresHoy ?? 0)
+                            </MudText>
+                            <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
+                                       OnClick='() => Nav.NavigateTo("/logs")'>
+                                Ver logs
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+                @* Slot 4 + 5: Top páginas + Dispositivos *@
+                <MudItem xs="12" sm="6">
+                    <MudGrid>
+
+                        @* Slot 4: Top páginas *@
+                        <MudItem xs="12">
+                            <MudPaper Elevation="2" Class="pa-4" Style="height: 320px; overflow-y: auto;">
+                                <MudStack Spacing="2">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Primary">Top páginas (últimos 7 días)</MudText>
+                                    @if (_topPaginas is null || _topPaginas.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Primary">Sin datos.</MudText>
+                                    }
+                                    else
+                                    {
+                                        var maxVisitas = _topPaginas[0].Visitas;
+                                        @foreach (var p in _topPaginas)
+                                        {
+                                            <MudStack Spacing="0">
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                    <MudText Typo="Typo.caption" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80%;">@p.Route</MudText>
+                                                    <MudText Typo="Typo.caption">@p.Visitas</MudText>
+                                                </MudStack>
+                                                <MudProgressLinear Value="@((double)p.Visitas / maxVisitas * 100)"
+                                                                   Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                                            </MudStack>
+                                        }
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+
+                        @* Slot 5: Distribución dispositivos *@
+                        <MudItem xs="12">
+                            <MudPaper Elevation="2" Class="pa-4" Style="height: 200px;">
+                                <MudStack Spacing="2">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Primary">Dispositivos (últimos 7 días)</MudText>
+                                    @if (_dispositivos is null || _dispositivos.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Primary">Sin datos.</MudText>
+                                    }
+                                    else
+                                    {
+                                        var totalDisp = _dispositivos.Sum(d => d.Conteo);
+                                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                                            @foreach (var d in _dispositivos)
+                                            {
+                                                var pct = totalDisp > 0 ? (int)Math.Round((double)d.Conteo / totalDisp * 100) : 0;
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Default">
+                                                    @d.Label @pct%
+                                                </MudChip>
+                                            }
+                                        </MudStack>
+                                        @foreach (var d in _dispositivos)
+                                        {
+                                            var pct2 = totalDisp > 0 ? (double)d.Conteo / totalDisp * 100 : 0;
+                                            <MudStack Spacing="0">
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                    <MudText Typo="Typo.caption">@d.Label</MudText>
+                                                    <MudText Typo="Typo.caption">@d.Conteo</MudText>
+                                                </MudStack>
+                                                <MudProgressLinear Value="@pct2" Color="Color.Primary"
+                                                                   Rounded="true" Size="Size.Small" />
+                                            </MudStack>
+                                        }
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+
+                    </MudGrid>
+                </MudItem>
+
+                @* Slot 6: Feed logs recientes *@
+                <MudItem xs="12" sm="6">
+                    <MudPaper Elevation="2" Class="pa-4" Style="height: 100%; min-height: 400px; overflow-y: auto;">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Logs recientes (Error / Warning)</MudText>
+                                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary"
+                                           OnClick='() => Nav.NavigateTo("/logs")'>
+                                    Ver todos
+                                </MudButton>
+                            </MudStack>
+                            @if (_logsRecientes is null || _logsRecientes.Count == 0)
+                            {
+                                <MudAlert Severity="Severity.Success" Dense="true">Sin errores recientes.</MudAlert>
+                            }
+                            else
+                            {
+                                @foreach (var log in _logsRecientes)
+                                {
+                                    <MudPaper Outlined="true" Class="pa-2">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudChip T="string" Size="Size.Small" Color="@GetLogColor(log.Level)">@log.Level</MudChip>
+                                            <MudStack Spacing="0" Style="min-width: 0;">
+                                                <MudText Typo="Typo.caption" Color="Color.Primary">
+                                                    @log.Timestamp.ToLocalTime().ToString("dd/MM HH:mm:ss")
+                                                </MudText>
+                                                <MudText Typo="Typo.body2" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                    @Truncate(log.Message, 90)
+                                                </MudText>
+                                            </MudStack>
+                                        </MudStack>
+                                    </MudPaper>
+                                }
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+
+            </MudGrid>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private DashboardStats? _stats;
+    private List<TopPagina>? _topPaginas;
+    private List<DispositivoConteo>? _dispositivos;
+    private List<SaludPortal.Admin.Entities.LogEntry>? _logsRecientes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _stats = await DashboardService.GetStatsHoyAsync();
+        _topPaginas = await DashboardService.GetTopPaginasAsync();
+        _dispositivos = await DashboardService.GetDistribucionDispositivosAsync();
+        _logsRecientes = await DashboardService.GetLogsRecientesAsync();
+        _loading = false;
+    }
+
+    private static Color GetEventColor(string? eventType) => eventType?.ToLowerInvariant() switch
+    {
+        "view_page" => Color.Info,
+        "click" => Color.Default,
+        "download_pdf" => Color.Error,
+        "view_image" => Color.Warning,
+        "copy_link" => Color.Success,
+        _ => Color.Default
+    };
+
+    private static Color GetLogColor(string? level) => level?.ToLowerInvariant() switch
+    {
+        "critical" => Color.Error,
+        "error" => Color.Error,
+        "warning" => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static string Truncate(string? value, int max) =>
+        string.IsNullOrWhiteSpace(value) ? "-" :
+        value.Length <= max ? value : value[..max] + "…";
+}

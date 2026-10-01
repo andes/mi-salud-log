@@ -1,0 +1,207 @@
+@page "/logs/{Id:long}"
+@attribute [Authorize]
+@using SaludPortal.Admin.Data
+@using SaludPortal.Admin.Services
+@inject LogsService LogService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Detalle de log - Admin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-4 mb-4">
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_log is null)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Registro no encontrado.</MudAlert>
+        <MudButton Class="mt-3" Variant="Variant.Text" Color="Color.Primary" OnClick='() => Nav.NavigateTo("/logs")'>Volver</MudButton>
+    }
+    else
+    {
+        <MudStack Spacing="3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick='() => Nav.NavigateTo("/logs")'>
+                    Volver a logs
+                </MudButton>
+                <MudText Typo="Typo.h5">Detalle del registro #@_log.Id</MudText>
+            </MudStack>
+
+                <MudPaper Class="pa-4" Elevation="1">
+                <MudStack Spacing="4">
+
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Primary" Class="section-header">Evento</MudText>
+                        <MudDivider Class="mb-3" />
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Timestamp</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudText Typo="Typo.body1">@_log.Timestamp.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss zzz")</MudText>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Nivel</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudChip T="string" Size="Size.Small" Color="@GetLevelColor(_log.Level)">@_log.Level</MudChip>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Categoria</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudText Typo="Typo.body2" Class="mono-inline">@(_log.Category ?? "-")</MudText>
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Primary" Class="section-header">Paciente &amp; Sesion</MudText>
+                        <MudDivider Class="mb-3" />
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">PacienteId</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2">@(_log.PatientId ?? "-")</MudText>
+                                    @if (_log.PatientId is not null)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                                       title="Copiar" OnClick='() => CopyAsync(_log.PatientId)' />
+                                    }
+                                </MudStack>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">SessionId</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2" Class="mono-inline">@(_log.SessionId ?? "-")</MudText>
+                                    @if (_log.SessionId is not null)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                                       title="Copiar" OnClick='() => CopyAsync(_log.SessionId)' />
+                                    }
+                                </MudStack>
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Primary" Class="section-header">Dispositivo &amp; Red</MudText>
+                        <MudDivider Class="mb-3" />
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">IP</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2" Class="mono-inline">@(_log.ClientIp ?? "-")</MudText>
+                                    @if (_log.ClientIp is not null)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Small"
+                                                       title="Copiar" OnClick='() => CopyAsync(_log.ClientIp)' />
+                                    }
+                                </MudStack>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Dispositivo</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudText Typo="Typo.body2">@FormatDevice(_log.Browser, _log.OsName, _log.OsVersion, _log.DeviceType)</MudText>
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">Geolocalizacion</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                @if (_log.Latitude.HasValue && _log.Longitude.HasValue)
+                                {
+                                    <MudLink Href="@($"https://maps.google.com/?q={_log.Latitude.Value:F6},{_log.Longitude.Value:F6}")" Target="_blank" Typo="Typo.body2" Class="mono-inline">
+                                        @($"{_log.Latitude.Value:F6}, {_log.Longitude.Value:F6}")
+                                    </MudLink>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Class="mono-inline">-</MudText>
+                                }
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Primary">User-Agent</MudText>
+                            </MudItem>
+                            <MudItem xs="12" sm="8">
+                                <MudPaper Outlined="true" Class="pa-3 detail-pre">@(_log.UserAgent ?? "-")</MudPaper>
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Primary" Class="section-header">Contenido</MudText>
+                        <MudDivider Class="mb-3" />
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.subtitle2" Color="Color.Primary">Mensaje</MudText>
+                            <MudPaper Outlined="true" Class="pa-3 detail-pre">@(_log.Message ?? "-")</MudPaper>
+
+                            @if (!string.IsNullOrWhiteSpace(_log.Exception))
+                            {
+                                <MudText Typo="Typo.subtitle2" Color="Color.Error">Exception / Stacktrace</MudText>
+                                <MudPaper Outlined="true" Class="pa-3 detail-pre detail-pre-ex">@_log.Exception</MudPaper>
+                            }
+                        </MudStack>
+                    </div>
+
+                </MudStack>
+            </MudPaper>
+        </MudStack>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public long Id { get; set; }
+
+    private LogEntry? _log;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _log = await LogService.GetLogByIdAsync(Id);
+        _loading = false;
+    }
+
+    private async Task CopyAsync(string? value)
+    {
+        if (!string.IsNullOrEmpty(value))
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value);
+    }
+
+    private static Color GetLevelColor(string? level) => level?.ToLowerInvariant() switch
+    {
+        "error" => Color.Error,
+        "critical" => Color.Error,
+        "warning" => Color.Warning,
+        "information" => Color.Info,
+        "debug" => Color.Primary,
+        _ => Color.Default
+    };
+
+    private static string FormatDevice(string? browser, string? osName, string? osVersion, string? deviceType)
+    {
+        var parts = new[]
+        {
+            browser,
+            string.IsNullOrWhiteSpace(osName) ? null : $"{osName} {osVersion}".Trim(),
+            deviceType
+        }
+        .Where(static value => !string.IsNullOrWhiteSpace(value));
+
+        var joined = string.Join(" / ", parts);
+        return string.IsNullOrWhiteSpace(joined) ? "-" : joined;
+    }
+}

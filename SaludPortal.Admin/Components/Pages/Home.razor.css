@@ -1,0 +1,26 @@
+.home-login-banner {
+    width: 100%;
+    max-width: 360px;
+    height: auto;
+}
+
+.home-login-card {
+    width: 100%;
+    max-width: 420px;
+    margin-inline: auto;
+    border-radius: 16px;
+}
+
+.align-center {
+    align-items: center;
+}
+
+@media (max-width: 960px) {
+    .home-login-banner {
+        max-width: 280px;
+    }
+
+    .home-login-card {
+        padding: 1.25rem;
+    }
+}

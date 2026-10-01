@@ -1,0 +1,144 @@
+@page "/telemetry/mapa"
+@attribute [Authorize]
+@using SaludPortal.Admin.Services
+@inject TelemetryService TelemetryService
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Mapa de calor — Telemetria</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-4 mb-4">
+    <MudStack Spacing="3">
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h4">Mapa de calor — Telemetria</MudText>
+            @if (!_loading && _pointCount >= 0)
+            {
+                <MudChip T="string" Color="Color.Primary" Size="Size.Small">
+                    @_pointCount @(_pointCount == 1 ? "punto" : "puntos") cargados
+                </MudChip>
+            }
+        </MudStack>
+
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudGrid Spacing="2">
+
+                <MudItem xs="12" sm="6" md="3">
+                    <MudDatePicker @bind-Date="_dateFrom" Label="Desde" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3">
+                    <MudDatePicker @bind-Date="_dateTo" Label="Hasta" Variant="Variant.Outlined"
+                                   Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSelect T="string" @bind-Value="_filterEventType" Label="Tipo de evento"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                        <MudSelectItem T="string" Value='@("view_page")'>view_page</MudSelectItem>
+                        <MudSelectItem T="string" Value='@("click")'>click</MudSelectItem>
+                        <MudSelectItem T="string" Value='@("download_pdf")'>download_pdf</MudSelectItem>
+                        <MudSelectItem T="string" Value='@("view_image")'>view_image</MudSelectItem>
+                        <MudSelectItem T="string" Value='@("copy_link")'>copy_link</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12" sm="6" md="3" Class="d-flex align-end">
+                    <MudStack Row="true" Spacing="1" Class="w-100">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFiltersAsync"
+                                   Disabled="_loading" FullWidth="true">
+                            Aplicar
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="ClearFiltersAsync"
+                                   Disabled="_loading" FullWidth="true">
+                            Limpiar
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+
+            </MudGrid>
+        </MudPaper>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+
+        <MudPaper Elevation="2" Class="overflow-hidden" Style="border-radius:8px;">
+            <div id="telemetry-heatmap" class="heatmap-container"></div>
+        </MudPaper>
+
+    </MudStack>
+</MudContainer>
+
+@code {
+    private const string MapId = "telemetry-heatmap";
+
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+    private string _filterEventType = string.Empty;
+    private bool _loading = true;
+    private int _pointCount = -1;
+    private bool _mapInitialized = false;
+
+    // Points serialized as [[lat, lon, intensity], ...]
+    private double[][] _points = [];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        await LoadDataAsync();
+        await JS.InvokeVoidAsync("adminHeatmap.init", MapId, _points);
+        _mapInitialized = true;
+        StateHasChanged();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        DateTimeOffset? from = _dateFrom.HasValue
+            ? new DateTimeOffset(_dateFrom.Value.Date, TimeZoneInfo.Local.GetUtcOffset(_dateFrom.Value.Date)).ToUniversalTime()
+            : null;
+
+        DateTimeOffset? to = _dateTo.HasValue
+            ? new DateTimeOffset(_dateTo.Value.Date.AddDays(1).AddTicks(-1), TimeZoneInfo.Local.GetUtcOffset(_dateTo.Value.Date)).ToUniversalTime()
+            : null;
+
+        var eventTypeFilter = string.IsNullOrWhiteSpace(_filterEventType) ? null : _filterEventType;
+
+        var rawPoints = await TelemetryService.GetHeatmapPointsAsync(from, to, eventTypeFilter);
+        _points = rawPoints.Select(p => new double[] { p.Lat, p.Lon, p.Intensity }).ToArray();
+        _pointCount = rawPoints.Count;
+        _loading = false;
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        await LoadDataAsync();
+        if (_mapInitialized)
+            await JS.InvokeVoidAsync("adminHeatmap.update", MapId, _points);
+        StateHasChanged();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _dateFrom = null;
+        _dateTo = null;
+        _filterEventType = string.Empty;
+        await ApplyFiltersAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_mapInitialized) return;
+        try
+        {
+            await JS.InvokeVoidAsync("adminHeatmap.destroy", MapId);
+        }
+        catch (JSDisconnectedException) { }
+    }
+}

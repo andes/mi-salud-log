@@ -1,0 +1,138 @@
+@page "/usuarios"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Identity
+@using SaludPortal.Admin.Services
+@inject UsuariosService UsuariosService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Usuarios - Admin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-4 mb-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h4">Usuarios</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
+                       OnClick="OpenCreateDialog">
+                Nuevo usuario
+            </MudButton>
+        </MudStack>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (_users.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No hay usuarios registrados.</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_users" Hover="true" Dense="true" Bordered="true" Striped="true"
+                      Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Email</MudTh>
+                    <MudTh Class="text-right">Acciones</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Email">
+                        @context.Email
+                        @if (context.Id == _currentUserId)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ml-2">Vos</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Acciones" Class="text-right">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Default"
+                                       title="Editar" OnClick="() => OpenEditDialog(context)" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       title="Eliminar" Disabled="@(context.Id == _currentUserId)"
+                                       OnClick="() => ConfirmDeleteAsync(context)" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private List<IdentityUser> _users = [];
+    private bool _loading = true;
+    private string? _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var nameId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _currentUserId = nameId;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _users = await UsuariosService.GetAllAsync();
+        _loading = false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await DialogService.ShowAsync<UsuarioFormDialog>("Nuevo usuario",
+            new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            Snackbar.Add("Usuario creado correctamente.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private async Task OpenEditDialog(IdentityUser user)
+    {
+        var parameters = new DialogParameters<UsuarioFormDialog>
+        {
+            { x => x.UserId, user.Id },
+            { x => x.ExistingEmail, user.Email }
+        };
+
+        var dialog = await DialogService.ShowAsync<UsuarioFormDialog>("Editar usuario", parameters,
+            new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+        {
+            Snackbar.Add("Usuario actualizado correctamente.", Severity.Success);
+            await LoadAsync();
+        }
+    }
+
+    private async Task ConfirmDeleteAsync(IdentityUser user)
+    {
+        var parameters = new DialogParameters<MudMessageBox>
+        {
+            { x => x.Message, $"¿Eliminar al usuario {user.Email}? Esta acción no se puede deshacer." },
+            { x => x.YesText, "Eliminar" },
+            { x => x.CancelText, "Cancelar" }
+        };
+        var dialog = await DialogService.ShowAsync<MudMessageBox>("Eliminar usuario", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall });
+        var dialogResult = await dialog.Result;
+
+        if (dialogResult is null || dialogResult.Canceled) return;
+
+        var deleteResult = await UsuariosService.DeleteAsync(user.Id);
+        if (deleteResult.Succeeded)
+        {
+            Snackbar.Add("Usuario eliminado.", Severity.Success);
+            await LoadAsync();
+        }
+        else
+        {
+            var errors = string.Join(", ", deleteResult.Errors.Select(e => e.Description));
+            Snackbar.Add($"Error: {errors}", Severity.Error);
+        }
+    }
+}

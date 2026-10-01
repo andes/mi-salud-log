@@ -1,0 +1,120 @@
+@using SaludPortal.Admin.Services
+@inject UsuariosService UsuariosService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(IsEditMode ? "Editar usuario" : "Nuevo usuario")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (_errors.Count > 0)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">
+                    @foreach (var error in _errors)
+                    {
+                        <div>@error</div>
+                    }
+                </MudAlert>
+            }
+
+            <MudTextField T="string" @bind-Value="_email" Label="Email" InputType="InputType.Email"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Required="true"
+                          Disabled="@_saving" />
+
+            <MudTextField T="string" @bind-Value="_password" Label="@(IsEditMode ? "Nueva contraseña (dejar vacío para no cambiar)" : "Contraseña")"
+                          InputType="InputType.Password" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Required="@(!IsEditMode)" Disabled="@_saving" />
+
+            @if (!string.IsNullOrWhiteSpace(_password))
+            {
+                <MudTextField T="string" @bind-Value="_confirmPassword" Label="Confirmar contraseña"
+                              InputType="InputType.Password" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Required="true" Disabled="@_saving" />
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_saving">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="@_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(IsEditMode ? "Guardar" : "Crear")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string? UserId { get; set; }
+    [Parameter] public string? ExistingEmail { get; set; }
+
+    private bool IsEditMode => UserId is not null;
+
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string _confirmPassword = string.Empty;
+    private bool _saving;
+    private List<string> _errors = [];
+
+    protected override void OnParametersSet()
+    {
+        if (ExistingEmail is not null)
+            _email = ExistingEmail;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SubmitAsync()
+    {
+        _errors = [];
+
+        if (string.IsNullOrWhiteSpace(_email))
+        {
+            _errors.Add("El email es requerido.");
+            return;
+        }
+
+        if (!IsEditMode && string.IsNullOrWhiteSpace(_password))
+        {
+            _errors.Add("La contraseña es requerida.");
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_password) && _password != _confirmPassword)
+        {
+            _errors.Add("Las contraseñas no coinciden.");
+            return;
+        }
+
+        _saving = true;
+
+        Microsoft.AspNetCore.Identity.IdentityResult result;
+
+        if (!IsEditMode)
+        {
+            result = await UsuariosService.CreateAsync(_email.Trim(), _password);
+        }
+        else
+        {
+            result = await UsuariosService.UpdateEmailAsync(UserId!, _email.Trim());
+
+            if (result.Succeeded && !string.IsNullOrWhiteSpace(_password))
+                result = await UsuariosService.ResetPasswordAsync(UserId!, _password);
+        }
+
+        _saving = false;
+
+        if (result.Succeeded)
+        {
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            _errors = result.Errors.Select(e => e.Description).ToList();
+        }
+    }
+}

@@ -1,0 +1,155 @@
+@page "/export/logs"
+@attribute [Authorize]
+@using SaludPortal.Admin.Models
+@using SaludPortal.Admin.Services
+@inject LogsService LogService
+@inject NavigationManager Nav
+
+<PageTitle>Exportar Logs - Admin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="mt-4 mb-4">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h4">Exportar Logs</MudText>
+
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+
+                <MudText Typo="Typo.subtitle1">Filtros</MudText>
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="12" md="6">
+                        <MudStack Spacing="1">
+                            <MudTextField T="string" @bind-Value="_search" Label="Buscar"
+                                          Placeholder="Mensaje o categoría"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense"
+                                          Immediate="true" OnKeyUp="OnSearchKeyUp" />
+                            <MudSelect T="string" @bind-Value="_filterLevel" Label="Nivel"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                                <MudSelectItem T="string" Value='@("Debug")'>Debug</MudSelectItem>
+                                <MudSelectItem T="string" Value='@("Information")'>Information</MudSelectItem>
+                                <MudSelectItem T="string" Value='@("Warning")'>Warning</MudSelectItem>
+                                <MudSelectItem T="string" Value='@("Error")'>Error</MudSelectItem>
+                                <MudSelectItem T="string" Value='@("Critical")'>Critical</MudSelectItem>
+                            </MudSelect>
+                        </MudStack>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudStack Spacing="1">
+                            <MudDatePicker @bind-Date="_dateFrom" Label="Desde" Variant="Variant.Outlined"
+                                           Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+                            <MudTimePicker @bind-Time="_timeFrom" Label="Hora desde" Variant="Variant.Outlined"
+                                           Margin="Margin.Dense" AmPm="false" />
+                        </MudStack>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudStack Spacing="1">
+                            <MudDatePicker @bind-Date="_dateTo" Label="Hasta" Variant="Variant.Outlined"
+                                           Margin="Margin.Dense" DateFormat="dd/MM/yyyy" />
+                            <MudTimePicker @bind-Time="_timeTo" Label="Hora hasta" Variant="Variant.Outlined"
+                                           Margin="Margin.Dense" AmPm="false" />
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+
+                <MudDivider />
+
+                <MudText Typo="Typo.subtitle1">Opciones de exportación</MudText>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudNumericField T="int" @bind-Value="_maxRows" Label="Máx. registros"
+                                     Min="1" Max="50000" Style="width:180px"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     HelperText="Máximo 50.000" />
+                    @if (_count.HasValue)
+                    {
+                        <MudChip T="string" Color="Color.Info" Size="Size.Small">
+                            @_count.Value.ToString("N0") registros coinciden
+                        </MudChip>
+                    }
+                </MudStack>
+
+                <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd" Wrap="Wrap.Wrap">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                               OnClick="GetCountAsync" Disabled="_counting">
+                        @(_counting ? "Consultando…" : "Ver total")
+                    </MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.TableChart"
+                               Variant="Variant.Filled" Color="Color.Success"
+                               OnClick="ExportCsv">CSV</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.DataObject"
+                               Variant="Variant.Filled" Color="Color.Warning"
+                               OnClick="ExportJson">JSON</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                               Variant="Variant.Filled" Color="Color.Error"
+                               OnClick="ExportPdf">PDF</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private string _filterLevel = string.Empty;
+    private DateTime? _dateFrom;
+    private DateTime? _dateTo;
+    private TimeSpan? _timeFrom;
+    private TimeSpan? _timeTo;
+    private string? _search;
+    private int _maxRows = 1000;
+    private long? _count;
+    private bool _counting;
+
+    private async Task GetCountAsync()
+    {
+        _counting = true;
+        var result = await LogService.GetLogsAsync(
+            1, 1,
+            string.IsNullOrWhiteSpace(_filterLevel) ? null : _filterLevel,
+            BuildFrom(), BuildTo(), _search);
+        _count = result.TotalCount;
+        _counting = false;
+    }
+
+    private void DoExport(string format) =>
+        Nav.NavigateTo(BuildExportUrl(format), forceLoad: true);
+
+    private void ExportCsv()  => DoExport("csv");
+    private void ExportJson() => DoExport("json");
+    private void ExportPdf()  => DoExport("pdf");
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await GetCountAsync();
+    }
+
+    private string BuildExportUrl(string format)
+    {
+        var sb = new System.Text.StringBuilder($"/api/export/logs?format={Uri.EscapeDataString(format)}&maxRows={_maxRows}");
+        if (!string.IsNullOrWhiteSpace(_filterLevel))
+            sb.Append($"&level={Uri.EscapeDataString(_filterLevel)}");
+        var from = BuildFrom();
+        var to = BuildTo();
+        if (from.HasValue) sb.Append($"&dateFrom={Uri.EscapeDataString(from.Value.ToString("O"))}");
+        if (to.HasValue)   sb.Append($"&dateTo={Uri.EscapeDataString(to.Value.ToString("O"))}");
+        if (!string.IsNullOrWhiteSpace(_search))
+            sb.Append($"&search={Uri.EscapeDataString(_search)}");
+        return sb.ToString();
+    }
+
+    private DateTimeOffset? BuildFrom()
+    {
+        if (!_dateFrom.HasValue) return null;
+        var dt = _dateFrom.Value.Date + (_timeFrom ?? TimeSpan.Zero);
+        return new DateTimeOffset(dt, TimeZoneInfo.Local.GetUtcOffset(dt)).ToUniversalTime();
+    }
+
+    private DateTimeOffset? BuildTo()
+    {
+        if (!_dateTo.HasValue) return null;
+        var dt = _timeTo.HasValue
+            ? _dateTo.Value.Date + _timeTo.Value
+            : _dateTo.Value.Date.AddDays(1).AddTicks(-1);
+        return new DateTimeOffset(dt, TimeZoneInfo.Local.GetUtcOffset(dt)).ToUniversalTime();
+    }
+}
