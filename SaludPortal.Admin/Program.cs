@@ -101,7 +101,7 @@ builder.Services.AddMudServices(config =>
 var app = builder.Build();
 
 // Apply pending EF migrations and seed admin user on startup.
-// On a brand-new DB, Npgsql EF v9 creates __EFMigrationsHistory automatically before querying it.
+// On a brand-new DB, Npgsql EF creates __EFMigrationsHistory automatically before querying it.
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

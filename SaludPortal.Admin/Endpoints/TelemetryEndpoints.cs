@@ -1,4 +1,4 @@
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using SaludPortal.Admin.Data;
 using SaludPortal.Admin.Entities;
 using SaludPortal.Admin.Models;
@@ -77,18 +77,18 @@ public static class TelemetryEndpoints
         .Produces(StatusCodes.Status413PayloadTooLarge)
         .Produces(StatusCodes.Status401Unauthorized)
         .Produces(StatusCodes.Status429TooManyRequests)
-        .WithOpenApi(operation =>
+        .AddOpenApiOperationTransformer((operation, _, _) =>
         {
-            operation.Parameters ??= new List<OpenApiParameter>();
+            operation.Parameters ??= [];
             operation.Parameters.Add(new OpenApiParameter
             {
                 Name = "X-Api-Key",
                 In = ParameterLocation.Header,
                 Required = true,
                 Description = "Shared API key for ingestion endpoints.",
-                Schema = new OpenApiSchema { Type = "string" }
+                Schema = new OpenApiSchema { Type = JsonSchemaType.String }
             });
-            return operation;
+            return Task.CompletedTask;
         });
     }
 }

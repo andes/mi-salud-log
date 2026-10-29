@@ -17,7 +17,7 @@ iniciar la aplicación.
 
 ## Requisitos
 
-- [.NET SDK 9](https://dotnet.microsoft.com/download) (9.0.200+ para `.slnx`)
+- [.NET SDK 10](https://dotnet.microsoft.com/download)
 - PostgreSQL 17 (o compatible)
 - Docker (opcional)
 
